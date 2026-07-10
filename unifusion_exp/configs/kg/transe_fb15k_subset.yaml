@@ -1,0 +1,16 @@
+run_id: kg_transe_fb15k_subset_v1
+
+data:
+  entity_id_file: artifacts/kg/mmrag_graph_entities.json
+  triples_tsv: /home/yongqi.yin/reaserch_paper/downloaded_resource/SimKGC/data/FB15k237/train.txt
+
+train:
+  embedding_dim: 100
+  epochs: 20
+  batch_size: 512
+  max_triples: 120000
+  device: gpu
+
+notes:
+  - Uses normalized ID matching between m.* and /m/*.
+  - For quick smoke, set dry_run=true or max_triples=5000.

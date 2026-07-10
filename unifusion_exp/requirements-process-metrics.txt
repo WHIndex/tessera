@@ -1,0 +1,13 @@
+# Dependencies for the mmRAG process-metric evaluation script
+# Validated in the graphrag-yyq environment used for this round's experiments.
+# Install with: pip install -r requirements-process-metrics.txt
+
+deepeval
+ragas
+ijson
+pandas
+numpy
+fastapi
+uvicorn
+langchain-core
+langchain-community

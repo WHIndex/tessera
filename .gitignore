@@ -1,0 +1,36 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.conda/
+.venv/
+venv/
+env/
+
+# Secrets and local path overrides
+.env
+*.env
+unifusion_exp/configs/paths.env
+
+# Large datasets, external baselines, model/index artifacts
+downloaded_resource/
+HippoRAG/
+unifusion_exp/artifacts/
+unifusion_exp/runs/
+unifusion_exp/logs/
+unifusion_exp/nohup.out
+unifusion_exp/*.log
+*.log
+nohup.out
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,21 @@
+run_id: router_fast_v1
+model_type: sklearn_tfidf_logreg
+
+data:
+  train_file: runs/latest/router_data/router_train.json
+  val_file: runs/latest/router_data/router_val.json
+  test_file: runs/latest/router_data/router_test.json
+
+train:
+  threshold: 0.5
+  max_train: null
+  max_val: null
+  max_test: null
+
+metrics:
+  primary:
+    - val_micro_f1
+    - val_subset_acc
+  secondary:
+    - val_entropy_mean
+    - val_entropy_p95
