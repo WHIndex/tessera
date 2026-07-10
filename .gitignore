@@ -15,16 +15,16 @@ env/
 # Secrets and local path overrides
 .env
 *.env
-unifusion_exp/configs/paths.env
+*/configs/paths.env
 
 # Large datasets, external baselines, model/index artifacts
 downloaded_resource/
 HippoRAG/
-unifusion_exp/artifacts/
-unifusion_exp/runs/
-unifusion_exp/logs/
-unifusion_exp/nohup.out
-unifusion_exp/*.log
+*/artifacts/
+*/runs/
+*/logs/
+*/nohup.out
+*/*.log
 *.log
 nohup.out
 
