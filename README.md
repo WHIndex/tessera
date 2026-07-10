@@ -19,9 +19,9 @@ tessera_exp/
 - `src/tessera_exp/e2e/source_evidence_fusion.py`: source-aware evidence fusion utilities.
 - `src/tessera_exp/e2e/source_head_selector.py`: source-aware head evidence selection.
 - `src/tessera_exp/e2e/submodular_packing.py`: set-level evidence packing and redundancy control.
-- `scripts/eval/run_e2e_table1c.py`: end-to-end evaluation driver.
 - `scripts/eval/apply_evidence_set_reranker.py`: apply a trained TESSERA reranker to saved rankings.
 - `scripts/eval/run_reader_from_rankings.py`: reader evaluation from saved rankings.
+- `scripts/eval/run_reader_from_context_docs.py`: reader evaluation from fixed context documents.
 - `scripts/train/train_evidence_set_reranker.py`: train the supervised evidence-set reranker.
 
 ## Main Entrypoints
