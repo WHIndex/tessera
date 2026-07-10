@@ -24,6 +24,12 @@ tessera_exp/
 - `scripts/eval/run_reader_from_rankings.py`: reader evaluation from saved rankings.
 - `scripts/train/train_evidence_set_reranker.py`: train the supervised evidence-set reranker.
 
+## Main Entrypoints
+
+- `tessera_exp/run_tessera_retrieval_experiment.sh`
+- `tessera_exp/run_tessera_reader_gpt4omini.sh`
+- `tessera_exp/run_tessera_llama33_70b_ctx6_parallel.sh`
+
 ## Notes
 
 The project expects mmRAG data and local model artifacts to be provided outside the repository. Keep local paths in environment variables or ignored local config files rather than committing machine-specific paths or API keys.
