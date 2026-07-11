@@ -171,7 +171,7 @@ def main() -> int:
     parser.add_argument("--corpus-json", type=Path, action="append", required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--method", type=str, default="tessera")
-    parser.add_argument("--base-method", type=str, default="tessera_rag")
+    parser.add_argument("--base-method", type=str, default="tessera")
     parser.add_argument("--label", type=str, default="TESSERA")
     parser.add_argument("--metrics-k", type=str, default="1,5")
     parser.add_argument("--max-queries", type=int, default=0)
@@ -253,7 +253,6 @@ def main() -> int:
                 "rankings": {
                     str(args.method): result.ranked_doc_ids,
                     "tessera": result.ranked_doc_ids,
-                    "tessera_rag": result.ranked_doc_ids,
                     "_base_tessera": base,
                 },
                 "trace": {
@@ -270,6 +269,10 @@ def main() -> int:
                     "tessera_anchor_guard_restored": float(result.anchor_guard_restored),
                     "tessera_anchor_guard_anchor_count": float(len(result.anchor_guard_anchors)),
                     "tessera_anchor_guard_anchors": list(result.anchor_guard_anchors[:8]),
+                    "tessera_selected_doc_ids": list(result.selected_doc_ids[:10]),
+                    "tessera_marginal_gains": {
+                        key: float(value) for key, value in list(result.marginal_gains.items())[:10]
+                    },
                     "tessera_model_scores_top": top_score_map(result.model_scores),
                     "tessera_final_scores_top": top_score_map(result.final_scores),
                 },

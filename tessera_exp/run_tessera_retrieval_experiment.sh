@@ -9,9 +9,9 @@ RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 export PYTHONUNBUFFERED=1
 export PYTHON_BIN="${PYTHON_BIN:-/home/wanghui/rag/multimodalrag/.conda/tessera-gpt4o/bin/python}"
 
-export TESSERA_MODEL="${TESSERA_MODEL:-${ESR_MODEL:-${ROOT_DIR}/artifacts/models/tessera_esr_v1/evidence_set_reranker.pkl}}"
-export BASE_TRACE="${BASE_TRACE:-${ROOT_DIR}/artifacts/results/20260705_162850_paper_retrieval_metrics_tessera_ser_pr_composer_v16/rankings_debug.jsonl}"
-export OUT_DIR="${OUT_DIR:-${ROOT_DIR}/artifacts/results/${RUN_ID}_paper_retrieval_metrics_tessera_v36}"
+export TESSERA_MODEL="${TESSERA_MODEL:-${ROOT_DIR}/artifacts/models/tessera/evidence_set_reranker.pkl}"
+export BASE_TRACE="${BASE_TRACE:-${ROOT_DIR}/artifacts/results/base_rankings/rankings_debug.jsonl}"
+export OUT_DIR="${OUT_DIR:-${ROOT_DIR}/artifacts/results/${RUN_ID}_tessera_retrieval}"
 export CORPUS_MAIN="${CORPUS_MAIN:-${ROOT_DIR}/artifacts/retrieval/corpus_subset_v1.json}"
 export CORPUS_STRICT="${CORPUS_STRICT:-${ROOT_DIR}/artifacts/retrieval/corpus_subset_strict_train_dev_v1.json}"
 export CORPUS_DEVPOS="${CORPUS_DEVPOS:-${ROOT_DIR}/artifacts/retrieval/corpus_subset_devpos_v2.json}"
@@ -24,17 +24,17 @@ for path in "${TESSERA_MODEL}" "${BASE_TRACE}" "${CORPUS_MAIN}"; do
 done
 
 EXTRA_ARGS=()
-if [[ -n "${TESSERA_POOL_K_OVERRIDE:-${ESR_POOL_K_OVERRIDE:-}}" ]]; then
-  EXTRA_ARGS+=(--pool-k "${TESSERA_POOL_K_OVERRIDE:-${ESR_POOL_K_OVERRIDE}}")
+if [[ -n "${TESSERA_POOL_K_OVERRIDE:-}" ]]; then
+  EXTRA_ARGS+=(--pool-k "${TESSERA_POOL_K_OVERRIDE}")
 fi
-if [[ -n "${TESSERA_PRESERVE_TOP_OVERRIDE:-${ESR_PRESERVE_TOP_OVERRIDE:-}}" ]]; then
-  EXTRA_ARGS+=(--preserve-top "${TESSERA_PRESERVE_TOP_OVERRIDE:-${ESR_PRESERVE_TOP_OVERRIDE}}")
+if [[ -n "${TESSERA_PRESERVE_TOP_OVERRIDE:-}" ]]; then
+  EXTRA_ARGS+=(--preserve-top "${TESSERA_PRESERVE_TOP_OVERRIDE}")
 fi
-if [[ -n "${TESSERA_BLEND_ORIGINAL_WEIGHT_OVERRIDE:-${ESR_BLEND_ORIGINAL_WEIGHT_OVERRIDE:-}}" ]]; then
-  EXTRA_ARGS+=(--blend-original-weight "${TESSERA_BLEND_ORIGINAL_WEIGHT_OVERRIDE:-${ESR_BLEND_ORIGINAL_WEIGHT_OVERRIDE}}")
+if [[ -n "${TESSERA_BLEND_ORIGINAL_WEIGHT_OVERRIDE:-}" ]]; then
+  EXTRA_ARGS+=(--blend-original-weight "${TESSERA_BLEND_ORIGINAL_WEIGHT_OVERRIDE}")
 fi
-if [[ -n "${TESSERA_TOP1_SWITCH_MARGIN_OVERRIDE:-${ESR_TOP1_SWITCH_MARGIN_OVERRIDE:-}}" ]]; then
-  EXTRA_ARGS+=(--top1-switch-margin "${TESSERA_TOP1_SWITCH_MARGIN_OVERRIDE:-${ESR_TOP1_SWITCH_MARGIN_OVERRIDE}}")
+if [[ -n "${TESSERA_TOP1_SWITCH_MARGIN_OVERRIDE:-}" ]]; then
+  EXTRA_ARGS+=(--top1-switch-margin "${TESSERA_TOP1_SWITCH_MARGIN_OVERRIDE}")
 fi
 
 "${PYTHON_BIN}" scripts/eval/apply_evidence_set_reranker.py \
@@ -45,7 +45,7 @@ fi
   --corpus-json "${CORPUS_DEVPOS}" \
   --out-dir "${OUT_DIR}" \
   --method "${METHOD:-tessera}" \
-  --base-method "${BASE_METHOD:-tessera_rag}" \
+  --base-method "${BASE_METHOD:-tessera}" \
   --label "TESSERA" \
   --metrics-k "${METRICS_K:-1,5}" \
   --max-queries "${MAX_QUERIES:-0}" \

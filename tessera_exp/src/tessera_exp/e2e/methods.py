@@ -7,7 +7,7 @@ METHOD_KEYS = [
     "tablerag",
     "quasar",
     "unihgkr_dense",
-    "tessera_rag",
+    "tessera",
     "tessera_submod",
     "ablation_no_redundancy_e2e",
     "ablation_no_pathmaxsim_e2e",
@@ -20,7 +20,7 @@ METHOD_LABELS = {
     "tablerag": "TableRAG-Adapter (Google)",
     "quasar": "QUASAR-Adapter",
     "unihgkr_dense": "UniHGKR-Base (Dense Baseline)",
-    "tessera_rag": "TESSERA-RAG (Ours)",
+    "tessera": "TESSERA (Ours)",
     "ablation_no_redundancy_e2e": "(d) TESSERA w/o Redundancy",
     "ablation_no_pathmaxsim_e2e": "(e) TESSERA w/o PathMaxSim",
     "tessera_submod": "TESSERA-Submod (Ours)",
@@ -33,19 +33,19 @@ METHOD_MODALITY_COVERAGE = {
     "tablerag": "T+Tbl+G+Vec",
     "quasar": "T+Tbl+G+Vec",
     "unihgkr_dense": "T+Tbl+G",
-    "tessera_rag": "T+Tbl+G+Vec",
+    "tessera": "T+Tbl+G+Vec",
     "ablation_no_redundancy_e2e": "T+Tbl+G+Vec",
     "ablation_no_pathmaxsim_e2e": "T+Tbl+G+Vec",
     "tessera_submod": "T+Tbl+G+Vec",
 }
 
 METHOD_PRESETS = {
-    "targeted": ["dense_concat", "tessera_rag"],
-    "main_only": ["dense_concat", "tessera_rag"],
-    "pathmaxsim": ["dense_concat", "tessera_rag", "ablation_no_pathmaxsim_e2e"],
-    "redundancy": ["dense_concat", "tessera_rag", "ablation_no_redundancy_e2e"],
+    "targeted": ["dense_concat", "tessera"],
+    "main_only": ["dense_concat", "tessera"],
+    "pathmaxsim": ["dense_concat", "tessera", "ablation_no_pathmaxsim_e2e"],
+    "redundancy": ["dense_concat", "tessera", "ablation_no_redundancy_e2e"],
     "baselines": ["dense_concat", "naive_rag", "carp", "tablerag", "quasar", "unihgkr_dense"],
-    "submod": ["dense_concat", "tessera_rag", "tessera_submod"],  # diagnostic only; submod underperforms in full eval
+    "submod": ["dense_concat", "tessera", "tessera_submod"],
     "full": METHOD_KEYS,
 }
 

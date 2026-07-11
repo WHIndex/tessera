@@ -9,41 +9,20 @@ from typing import Any, Sequence
 
 import numpy as np
 
-try:
-    from tessera_exp.e2e.counterfactual_policy_selector import (
-        FAMILY_LABELS,
-        doc_stem,
-        expected_source_for_family,
-        query_family,
-        source_bucket,
-    )
-except Exception:  # pragma: no cover - keeps this module importable in partial installs
-    FAMILY_LABELS = ["cwq", "nq", "ott", "tat", "triviaqa", "webqsp", "other"]
+def source_bucket(doc_id: str) -> str:
+    raw = str(doc_id or "")
+    if raw.startswith("m.") or raw.startswith("/m/") or raw.startswith("g."):
+        return "kg"
+    prefix = raw.split("_", 1)[0].lower() if "_" in raw else raw.lower()
+    if prefix in {"ott", "tat"}:
+        return "table"
+    return "text"
 
-    def source_bucket(doc_id: str) -> str:
-        raw = str(doc_id or "")
-        if raw.startswith("m.") or raw.startswith("/m/") or raw.startswith("g."):
-            return "kg"
-        prefix = raw.split("_", 1)[0].lower() if "_" in raw else raw.lower()
-        if prefix in {"ott", "tat"}:
-            return "table"
-        return "text"
 
-    def query_family(query_id: str) -> str:
-        family = str(query_id or "").split("_", 1)[0].lower()
-        return family if family in FAMILY_LABELS else "other"
-
-    def expected_source_for_family(family: str) -> str:
-        if family in {"cwq", "webqsp"}:
-            return "kg"
-        if family in {"ott", "tat"}:
-            return "table"
-        return "text"
-
-    def doc_stem(doc_id: str) -> str:
-        raw = str(doc_id or "")
-        pieces = raw.rsplit("_", 1)
-        return pieces[0] if len(pieces) == 2 and pieces[1].isdigit() else raw
+def doc_stem(doc_id: str) -> str:
+    raw = str(doc_id or "")
+    pieces = raw.rsplit("_", 1)
+    return pieces[0] if len(pieces) == 2 and pieces[1].isdigit() else raw
 
 
 SOURCE_LABELS = ["text", "table", "kg"]
@@ -99,17 +78,8 @@ ESR_FEATURE_NAMES = [
     "source_text",
     "source_table",
     "source_kg",
-    "source_expected",
     "source_count_top5_norm",
     "source_count_top10_norm",
-    "family_cwq",
-    "family_nq",
-    "family_ott",
-    "family_tat",
-    "family_triviaqa",
-    "family_webqsp",
-    "family_other",
-    "family_expected_source_count_top5_norm",
     "same_stem_as_top1",
     "same_source_as_top1",
     "query_token_count_log",
@@ -125,26 +95,6 @@ ESR_FEATURE_NAMES = [
     "query_year_count_log",
     "doc_year_count_log",
     "year_overlap",
-    "router_bucket_prob",
-    "router_expected_prob",
-    "query_prior_bucket",
-    "query_prior_expected",
-    "query_prior_disagreement",
-    "source_budget_top1_prob",
-    "source_budget_need_prob",
-    "source_budget_avg_prob",
-    "evidence_source_count_trace",
-    "uni_candidate_size_log",
-    "heavy_table_weight_eff",
-    "heavy_kg_path_weight_eff",
-    "heavy_token_late_weight_eff",
-    "heavy_token_cross_weight_eff",
-    "qa_objective_weight_eff",
-    "upo_lite_retrieval_weight_eff",
-    "ser_score_trace",
-    "ceps_positive_prob_trace",
-    "kgcv_score_trace",
-    "erv_score_trace",
 ]
 
 
@@ -156,6 +106,13 @@ class EvidenceSetRerankerConfig:
     blend_original_weight: float = 0.10
     top1_switch_margin: float = 0.02
     min_model_score: float = -1.0
+    utility_weight: float = 1.0
+    coverage_weight: float = 0.18
+    source_balance_weight: float = 0.10
+    anchor_weight: float = 0.06
+    redundancy_weight: float = 0.14
+    length_cost_weight: float = 0.02
+    min_gain: float = -1e9
     anchor_guard_enabled: bool = False
     anchor_guard_topk: int = 5
     anchor_guard_max_restores: int = 1
@@ -172,6 +129,8 @@ class EvidenceSetRerankerResult:
     final_scores: dict[str, float] = field(default_factory=dict)
     anchor_guard_anchors: list[str] = field(default_factory=list)
     anchor_guard_restored: int = 0
+    selected_doc_ids: list[str] = field(default_factory=list)
+    marginal_gains: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -262,7 +221,7 @@ class EvidenceSetRerankerBundle:
 
         score_by_doc = {doc_id: float(score) for doc_id, score in zip(candidates, model_scores)}
         final_by_doc = {doc_id: float(score) for doc_id, score in zip(candidates, final_scores)}
-        ordered = [
+        utility_ordered = [
             doc_id
             for doc_id, _ in sorted(
                 zip(candidates, final_scores),
@@ -271,9 +230,21 @@ class EvidenceSetRerankerBundle:
             )
         ]
         if float(config.min_model_score) > -1.0:
-            high = [doc_id for doc_id in ordered if score_by_doc.get(doc_id, 0.0) >= float(config.min_model_score)]
-            low = [doc_id for doc_id in ordered if doc_id not in set(high)]
-            ordered = high + low
+            high = [doc_id for doc_id in utility_ordered if score_by_doc.get(doc_id, 0.0) >= float(config.min_model_score)]
+            low = [doc_id for doc_id in utility_ordered if doc_id not in set(high)]
+            utility_ordered = high + low
+
+        selected, marginal_gains = select_evidence_set(
+            query_text=query_text,
+            ranked_doc_ids=base,
+            candidate_doc_ids=candidates,
+            corpus_texts=corpus_texts or {},
+            final_scores=final_by_doc,
+            config=config,
+            protected_doc_ids=protected,
+        )
+        selected_set = set(selected)
+        ordered = selected + [doc_id for doc_id in utility_ordered if doc_id not in selected_set]
 
         if preserve <= 0 and ordered and ordered[0] != base[0] and base[0] in final_by_doc:
             proposed = ordered[0]
@@ -309,6 +280,8 @@ class EvidenceSetRerankerBundle:
             final_scores=final_by_doc,
             anchor_guard_anchors=anchors,
             anchor_guard_restored=int(restored),
+            selected_doc_ids=list(selected),
+            marginal_gains={k: float(v) for k, v in marginal_gains.items()},
         )
 
 
@@ -367,8 +340,6 @@ def apply_anchor_guard(
     if not base or not proposed or max_restores <= 0:
         return proposed, [], 0
 
-    family = query_family(str(query_id))
-    expected = expected_source_for_family(family)
     head = base[0]
     head_source = source_bucket(head)
     head_stem = doc_stem(head)
@@ -381,18 +352,8 @@ def apply_anchor_guard(
             continue
         bucket = source_bucket(doc_id)
         stem = doc_stem(doc_id)
-        protect = False
-        if family in {"ott", "tat"}:
-            protect = bucket == "table" and pos < min(guard_topk, 3)
-        elif family in {"cwq", "webqsp"}:
-            protect = bucket == "kg" and pos < min(guard_topk, 3)
-        elif family in {"nq", "triviaqa"}:
-            protect = stem == head_stem
-        else:
-            protect = bucket == expected or stem == head_stem
+        protect = pos == 0 or stem == head_stem or bucket == head_source
         if stem == head_stem and pos < guard_topk:
-            protect = True
-        if family in {"ott", "tat", "cwq", "webqsp"} and bucket == expected and pos < min(guard_topk, 3):
             protect = True
         if protect:
             anchors.append(doc_id)
@@ -445,10 +406,7 @@ def build_evidence_features(
     rank_position: int,
     trace: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    trace = trace or {}
     ranked = [str(x) for x in ranked_doc_ids]
-    family = query_family(str(query_id))
-    expected = expected_source_for_family(family)
     bucket = source_bucket(str(doc_id))
     top1 = ranked[0] if ranked else ""
     q_tokens = content_tokens(query_text)
@@ -463,7 +421,6 @@ def build_evidence_features(
     id_overlap = q_tokens & id_tokens
     source_counts_top5 = _source_counts(ranked[:5])
     source_counts_top10 = _source_counts(ranked[:10])
-    expected_top5 = sum(1 for item in ranked[:5] if source_bucket(item) == expected)
     source_count5 = source_counts_top5.get(bucket, 0)
     source_count10 = source_counts_top10.get(bucket, 0)
 
@@ -477,14 +434,11 @@ def build_evidence_features(
         float(bucket == "text"),
         float(bucket == "table"),
         float(bucket == "kg"),
-        float(bucket == expected),
         float(source_count5) / 5.0,
         float(source_count10) / 10.0,
     ]
-    row.extend(float(family == label) for label in FAMILY_LABELS)
     row.extend(
         [
-            float(expected_top5) / 5.0,
             float(doc_stem(doc_id) == doc_stem(top1)) if top1 else 0.0,
             float(bucket == source_bucket(top1)) if top1 else 0.0,
             _log_count(len(q_tokens)),
@@ -500,35 +454,80 @@ def build_evidence_features(
             _log_count(len(q_years)),
             _log_count(len(d_years)),
             _overlap_ratio(q_years, d_years),
-            trace_source_value(trace, "router", bucket),
-            trace_source_value(trace, "router", expected),
-            trace_source_value(trace, "query_prior", bucket),
-            trace_source_value(trace, "query_prior", expected),
-            trace_float(trace, "query_prior_disagreement"),
-            trace_source_value(trace, "tessera_source_budgeter_top1_prob", bucket),
-            trace_source_value(trace, "tessera_source_budgeter_need_prob", bucket),
-            _avg(
-                [
-                    trace_source_value(trace, "tessera_source_budgeter_top1_prob", bucket),
-                    trace_source_value(trace, "tessera_source_budgeter_need_prob", bucket),
-                    trace_source_value(trace, "tessera_source_budgeter_add_prob", bucket),
-                ]
-            ),
-            trace_source_value(trace, "tessera_source_evidence", bucket),
-            _log_count(trace_float(trace, "uni_candidate_size")),
-            trace_float(trace, "heavy_table_weight_eff"),
-            trace_float(trace, "heavy_kg_path_weight_eff"),
-            trace_float(trace, "heavy_token_late_weight_eff"),
-            trace_float(trace, "heavy_token_cross_weight_eff"),
-            trace_float(trace, "qa_objective_weight_eff"),
-            trace_float(trace, "upo_lite_retrieval_weight_eff"),
-            _max_prefixed(trace, ("tessera_ser_", "ser_")),
-            _max_prefixed(trace, ("tessera_ceps_positive", "tessera_ceps_predicted")),
-            _max_prefixed(trace, ("tessera_kgcv_", "kgcv_")),
-            _max_prefixed(trace, ("tessera_erv_", "erv_")),
         ]
     )
     return np.asarray(row, dtype=np.float32)
+
+
+def select_evidence_set(
+    *,
+    query_text: str,
+    ranked_doc_ids: Sequence[str],
+    candidate_doc_ids: Sequence[str],
+    corpus_texts: dict[str, str],
+    final_scores: dict[str, float],
+    config: EvidenceSetRerankerConfig,
+    protected_doc_ids: Sequence[str] = (),
+) -> tuple[list[str], dict[str, float]]:
+    budget = max(0, int(config.topk) - len(protected_doc_ids))
+    if budget <= 0:
+        return [], {}
+    candidates = _dedupe([str(x) for x in candidate_doc_ids])
+    selected: list[str] = []
+    gains: dict[str, float] = {}
+    q_tokens = content_tokens(query_text)
+    covered: set[str] = set()
+    selected_sources: dict[str, int] = {label: 0 for label in SOURCE_LABELS}
+    selected_tokens: dict[str, set[str]] = {}
+    protected = [str(x) for x in protected_doc_ids]
+    for doc_id in protected:
+        selected_sources[source_bucket(doc_id)] = selected_sources.get(source_bucket(doc_id), 0) + 1
+        toks = content_tokens(corpus_texts.get(doc_id, "") or doc_id.replace("_", " "))
+        covered.update(q_tokens & toks)
+        selected_tokens[doc_id] = toks
+
+    token_cache = {
+        doc_id: content_tokens(corpus_texts.get(doc_id, "") or doc_id.replace("_", " "))
+        for doc_id in candidates
+    }
+    anchor_set = set(str(x) for x in ranked_doc_ids[: min(3, len(ranked_doc_ids))])
+    remaining = list(candidates)
+    while remaining and len(selected) < budget:
+        best_doc = ""
+        best_gain = -1e18
+        for doc_id in remaining:
+            tokens = token_cache.get(doc_id, set())
+            source = source_bucket(doc_id)
+            utility = float(final_scores.get(doc_id, 0.0))
+            new_coverage = len((q_tokens & tokens) - covered) / max(1.0, float(len(q_tokens)))
+            source_gain = 1.0 / math.sqrt(float(selected_sources.get(source, 0) + 1))
+            anchor_gain = 1.0 if doc_id in anchor_set else 0.0
+            redundancy = 0.0
+            if selected_tokens:
+                redundancy = max(_jaccard(tokens, prev) for prev in selected_tokens.values())
+            length_cost = _log_count(len(tokens)) / 10.0
+            gain = (
+                float(config.utility_weight) * utility
+                + float(config.coverage_weight) * new_coverage
+                + float(config.source_balance_weight) * source_gain
+                + float(config.anchor_weight) * anchor_gain
+                - float(config.redundancy_weight) * redundancy
+                - float(config.length_cost_weight) * length_cost
+            )
+            if gain > best_gain:
+                best_doc = doc_id
+                best_gain = float(gain)
+        if not best_doc or best_gain < float(config.min_gain):
+            break
+        selected.append(best_doc)
+        gains[best_doc] = float(best_gain)
+        remaining = [doc_id for doc_id in remaining if doc_id != best_doc]
+        best_tokens = token_cache.get(best_doc, set())
+        selected_tokens[best_doc] = best_tokens
+        covered.update(q_tokens & best_tokens)
+        best_source = source_bucket(best_doc)
+        selected_sources[best_source] = selected_sources.get(best_source, 0) + 1
+    return selected, gains
 
 
 def content_tokens(text: str | None) -> set[str]:

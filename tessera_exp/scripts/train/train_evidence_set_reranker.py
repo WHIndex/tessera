@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
+from collections import defaultdict
 import json
 import math
 from pathlib import Path
@@ -20,13 +20,13 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from tessera_exp.e2e.counterfactual_policy_selector import query_family, source_bucket  # noqa: E402
 from tessera_exp.e2e.evidence_set_reranker import (  # noqa: E402
     ESR_FEATURE_NAMES,
     EvidenceSetRerankerBundle,
     EvidenceSetRerankerConfig,
     build_evidence_features,
     save_evidence_set_reranker_bundle,
+    source_bucket,
 )
 
 
@@ -48,7 +48,8 @@ def iter_jsonl(path: Path, max_examples: int = 0) -> list[dict[str, Any]]:
 
 
 def ranking_for_row(row: dict[str, Any], method: str) -> list[str]:
-    return [str(x) for x in (row.get("rankings", {}) or {}).get(method, [])]
+    rankings = row.get("rankings", {}) or {}
+    return [str(x) for x in (rankings.get(method) or [])]
 
 
 def qrels_for_row(row: dict[str, Any]) -> dict[str, float]:
@@ -125,7 +126,6 @@ def make_dataset(
         "queries": 0,
         "examples": 0,
         "positive_examples": 0,
-        "positive_by_family": defaultdict(int),
         "positive_by_source": defaultdict(int),
         "queries_with_positive_in_pool": 0,
         "queries_without_positive_in_pool": 0,
@@ -142,7 +142,6 @@ def make_dataset(
         query_text = str(row.get("query", ""))
         query_id = str(row.get("query_id", ""))
         trace = row.get("trace", {}) or {}
-        family = query_family(query_id)
         max_grade = max(float(v) for v in qrels.values()) if qrels else 1.0
         row_weights: list[float] = []
         row_start = len(xs)
@@ -167,7 +166,6 @@ def make_dataset(
                 label = (grade / max(1e-6, max_grade)) ** float(grade_power)
                 weight = float(positive_weight) * (1.0 + 0.35 * label)
                 stats["positive_examples"] += 1
-                stats["positive_by_family"][family] += 1
                 stats["positive_by_source"][source_bucket(doc_id)] += 1
             else:
                 label = 0.0
@@ -185,7 +183,6 @@ def make_dataset(
                 ws.append(float(row_weights[i - row_start] * scale))
 
     stats["examples"] = int(len(xs))
-    stats["positive_by_family"] = dict(stats["positive_by_family"])
     stats["positive_by_source"] = dict(stats["positive_by_source"])
     if not xs:
         return (
@@ -326,12 +323,12 @@ def parse_int_list(raw: str) -> list[int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Train an oracle-distilled evidence-set reranker over saved TESSERA rankings.")
+    parser = argparse.ArgumentParser(description="Train the supervised TESSERA evidence utility model over saved rankings.")
     parser.add_argument("--train-rankings-jsonl", type=Path, required=True)
     parser.add_argument("--dev-rankings-jsonl", type=Path, required=True)
     parser.add_argument("--corpus-json", type=Path, action="append", required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
-    parser.add_argument("--method", type=str, default="tessera_rag")
+    parser.add_argument("--method", type=str, default="tessera")
     parser.add_argument("--pool-k", type=int, default=10)
     parser.add_argument("--topk", type=int, default=5)
     parser.add_argument("--metrics-k", type=str, default="1,5")
@@ -353,6 +350,12 @@ def main() -> int:
     parser.add_argument("--blend-grid", type=str, default="0,0.05,0.10,0.16,0.24,0.36")
     parser.add_argument("--margin-grid", type=str, default="0,0.01,0.02,0.04,0.08,0.14,999")
     parser.add_argument("--preserve-grid", type=str, default="0,1")
+    parser.add_argument("--coverage-weight", type=float, default=0.18)
+    parser.add_argument("--source-balance-weight", type=float, default=0.10)
+    parser.add_argument("--anchor-weight", type=float, default=0.06)
+    parser.add_argument("--redundancy-weight", type=float, default=0.14)
+    parser.add_argument("--length-cost-weight", type=float, default=0.02)
+    parser.add_argument("--min-gain", type=float, default=-1e9)
     parser.add_argument("--seed", type=int, default=13)
     parser.add_argument("--allow-test-split-training", action="store_true")
     args = parser.parse_args()
@@ -396,14 +399,28 @@ def main() -> int:
     except TypeError:
         model.fit(x_train, y_train)
 
-    base_config = EvidenceSetRerankerConfig(pool_k=int(args.pool_k), topk=int(args.topk))
+    base_config = EvidenceSetRerankerConfig(
+        pool_k=int(args.pool_k),
+        topk=int(args.topk),
+        coverage_weight=float(args.coverage_weight),
+        source_balance_weight=float(args.source_balance_weight),
+        anchor_weight=float(args.anchor_weight),
+        redundancy_weight=float(args.redundancy_weight),
+        length_cost_weight=float(args.length_cost_weight),
+        min_gain=float(args.min_gain),
+    )
     raw_bundle = EvidenceSetRerankerBundle(
         model=model,
         feature_names=list(ESR_FEATURE_NAMES),
         config=base_config,
         metadata={
-            "method_name": "Evidence-Set Reranker (ESR)",
-            "method_formulation": "learn s(q,e)=f_theta(phi(q,e,C)) from train/dev qrels; rerank a unified text/table/KG evidence pool.",
+            "method_name": "TESSERA",
+            "method_formulation": (
+                "learn s(q,e)=f_theta(phi(q,e,C)) from graded train/dev qrels, then greedily "
+                "assemble a unified text/table/KG evidence set with utility, coverage, source "
+                "complementarity, anchor preservation, redundancy, and length-cost terms."
+            ),
+            "dataset_id_features": False,
             "train_rankings_jsonl": str(args.train_rankings_jsonl),
             "dev_rankings_jsonl": str(args.dev_rankings_jsonl),
             "corpus_json": [str(x) for x in args.corpus_json],
@@ -414,6 +431,14 @@ def main() -> int:
             "positive_weight": float(args.positive_weight),
             "hard_negative_weight": float(args.hard_negative_weight),
             "grade_power": float(args.grade_power),
+            "objective_weights": {
+                "coverage_weight": float(args.coverage_weight),
+                "source_balance_weight": float(args.source_balance_weight),
+                "anchor_weight": float(args.anchor_weight),
+                "redundancy_weight": float(args.redundancy_weight),
+                "length_cost_weight": float(args.length_cost_weight),
+                "min_gain": float(args.min_gain),
+            },
         },
     )
 

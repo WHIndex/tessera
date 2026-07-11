@@ -31,7 +31,6 @@ def load_json(path: Path):
 
 def load_rankings(path: Path, method: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
-    fallback_method = "tessera_rag" if str(method) == "tessera" else ""
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
             if not line.strip():
@@ -39,11 +38,10 @@ def load_rankings(path: Path, method: str) -> dict[str, list[str]]:
             row = json.loads(line)
             qid = str(row.get("query_id", row.get("id", "")))
             rankings = row.get("rankings", {})
-            selected_method = method if method in rankings else fallback_method
-            if not selected_method or selected_method not in rankings:
+            if method not in rankings:
                 available = ", ".join(sorted(rankings.keys()))
                 raise ValueError(f"method '{method}' not found for {qid}; available: {available}")
-            out[qid] = [str(doc_id) for doc_id in rankings[selected_method]]
+            out[qid] = [str(doc_id) for doc_id in rankings[method]]
     return out
 
 
@@ -183,8 +181,8 @@ def main() -> int:
     parser.add_argument("--split-file", type=Path, required=True)
     parser.add_argument("--corpus-file", type=Path, required=True)
     parser.add_argument("--rankings-debug", type=Path, required=True)
-    parser.add_argument("--ranking-method", type=str, default="tessera_rag")
-    parser.add_argument("--method-label", type=str, default="tessera_rag")
+    parser.add_argument("--ranking-method", type=str, default="tessera")
+    parser.add_argument("--method-label", type=str, default="tessera")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--max-queries", type=int, default=0)
     parser.add_argument("--qa-context-k", type=int, default=3)
