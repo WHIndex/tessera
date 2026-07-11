@@ -2,8 +2,6 @@
 
 TESSERA (**Task-aware Evidence Set Selection and Efficient Retrieval Assembly**) is a task-aware evidence selection framework for multimodal RAG over unified text, table, and KG evidence chunks.
 
-This repository contains the cleaned source code for TESSERA. Local datasets, model checkpoints, experiment logs, generated artifacts, conda environments, and temporary run outputs are intentionally excluded from Git.
-
 ## Repository Layout
 
 ```text
@@ -29,7 +27,3 @@ tessera_exp/
 - `tessera_exp/run_tessera_retrieval_experiment.sh`
 - `tessera_exp/run_tessera_reader_gpt4omini.sh`
 - `tessera_exp/run_tessera_llama33_70b_ctx6_parallel.sh`
-
-## Notes
-
-The project expects mmRAG data and local model artifacts to be provided outside the repository. Keep local paths in environment variables or ignored local config files rather than committing machine-specific paths or API keys.
